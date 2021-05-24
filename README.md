@@ -2,7 +2,7 @@
 
 Loops in the browser!
 
-[Listen here](https://mikesol.github.io/feedback/)
+[Listen here](https://mikesol.github.io/feedback/index.html)
 
 ## Run locally
 
