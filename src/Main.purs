@@ -82,7 +82,7 @@ doChanges = WAGS.do
         , bpf1: bandpass_ { freq: ap' $ cos (time * pi * 1.6) * 1000.0 + 1500.0 }
         , delay1: delay_ $ ap' (0.3 + cos (time * pi * 0.7) * 0.1)
         , hpf2: highpass_ { freq: ap' $ cos (time * pi * 4.0) * 1000.0 + 1500.0 }
-        , delay2: delay_ $ ap' (2.0 + sin (time * pi * 0.2) * 1.6)
+        , delay2: delay_ $ ap' (0.1 + sin (time * pi * 0.2) * 0.07)
         }
 
 createFrame :: FrameTp Frame0 {} SceneType Unit
@@ -96,7 +96,7 @@ createFrame =
         , atten2: gain_ 0.6
         , gain2: gain_ 0.5
         , gain_1_2: gain_ 0.7
-        , delay_1_2: delay_ 2.0
+        , delay_1_2: delay_ 0.9
         , mix: gain_ 1.0
         }
     :*> doChanges
@@ -154,7 +154,8 @@ render _ =
             [ HH.div [ classes [ "flex-grow" ] ] []
             , HH.div_
                 [ HH.h1 [ classes [ "text-center", "text-3xl", "font-bold" ] ]
-                    [ HH.text "Fun with feedback" ], HH.p [ classes [ "text-center" ] ]
+                    [ HH.text "Fun with feedback" ]
+                , HH.p [ classes [ "text-center" ] ]
                     [ HH.text "Use headphones!" ]
                 , HH.button
                     [ classes [ "text-2xl", "m-5", "bg-indigo-500", "p-3", "rounded-lg", "text-white", "hover:bg-indigo-400" ], HE.onClick \_ -> StartAudio ]
