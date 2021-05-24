@@ -1,6 +1,7 @@
 module Main where
 
 import Prelude
+
 import Control.Comonad.Cofree (Cofree, mkCofree)
 import Data.Foldable (for_)
 import Data.Functor.Indexed (ivoid)
@@ -18,9 +19,10 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
-import Math (cos, pi, sin, (%))
+import Math (cos, pi, sin)
 import WAGS.Change (change)
-import WAGS.Control.Functions (env, loop, start, (@|>))
+import WAGS.Control.Functions (env, start)
+import WAGS.Control.Functions.Validated (loop, (@|>))
 import WAGS.Control.Qualified as WAGS
 import WAGS.Control.Types (Frame, Frame0, Scene)
 import WAGS.Graph.AudioUnit (TBandpass, TDelay, TGain, THighpass, TMicrophone, TSpeaker)
@@ -32,15 +34,29 @@ import WAGS.Run (SceneI, run)
 vol = 1.4 :: Number
 
 type SceneType
-  = { speaker :: TSpeaker /\ { gain0 :: Unit, gain1 :: Unit }
-    , gain0 :: TGain /\ { microphone :: Unit, hpf0 :: Unit }
+  = { speaker :: TSpeaker /\ { mix :: Unit }
+    , mix :: TGain /\ { gain0 :: Unit, gain1 :: Unit, gain2 :: Unit }
+    -- feedback0
+    , gain0 :: TGain /\ { microphone :: Unit, hpf0 :: Unit, delay_1_2 :: Unit }
     , hpf0 :: THighpass /\ { delay0 :: Unit }
     , delay0 :: TDelay /\ { atten0 :: Unit }
     , atten0 :: TGain /\ { gain0 :: Unit }
-    , gain1 :: TGain /\ { microphone :: Unit, bfp1 :: Unit }
+    -- feedback1
+    , gain1 :: TGain /\ { microphone :: Unit, bpf1 :: Unit }
     , bpf1 :: TBandpass /\ { delay1 :: Unit }
     , delay1 :: TDelay /\ { atten1 :: Unit }
-    , atten1 :: TGain /\ { gain1 :: Unit }
+    , atten1 :: TGain /\ { gain1 :: Unit, delayX :: Unit }
+    -- feedback2
+    , gain2 :: TGain /\ { microphone :: Unit, hpf2 :: Unit }
+    , hpf2 :: THighpass /\ { delay2 :: Unit }
+    , delay2 :: TDelay /\ { atten2 :: Unit }
+    , atten2 :: TGain /\ { gain2 :: Unit }
+    -- intermediary feedback
+    , delay_1_2 :: TDelay /\ { gain_1_2 :: Unit }
+    , gain_1_2 :: TGain /\ { gain2 :: Unit, gain1 :: Unit }
+    -- full loop
+    , delayX :: TDelay /\ { mix :: Unit }
+    -- microphone
     , microphone :: TMicrophone /\ {}
     }
 
@@ -53,10 +69,15 @@ createFrame = WAGS.do
   patch
   ivoid
     $ change
-        { atten0: gain_ 0.5
-        , gain0: gain_ 0.4
-        , atten1: gain_ 0.5
-        , gain1: gain_ 0.4
+        { atten0: gain_ 0.6
+        , gain0: gain_ 0.5
+        , atten1: gain_ 0.6
+        , gain1: gain_ 0.5
+        , atten2: gain_ 0.6
+        , gain2: gain_ 0.5
+        , gain_1_2: gain_ 0.7
+        , delay_1_2: delay_ 2.0
+        , mix: gain_ 1.0
         }
   doChanges
 
@@ -66,9 +87,11 @@ doChanges = WAGS.do
   ivoid
     $ change
         { hpf0: highpass_ { freq: sin (time * pi * 0.5) * 1000.0 + 1500.0 }
-        , delay0: delay_ (0.4 + (0.4 % time))
+        , delay0: delay_ (0.4 + sin (time * pi * 2.0) * 0.2)
         , bpf1: bandpass_ { freq: cos (time * pi * 1.6) * 1000.0 + 1500.0 }
-        , delay1: delay_ (0.2 + (0.2 % time))
+        , delay1: delay_ (0.3 + cos (time * pi * 0.7) * 0.1)
+        , hpf2: highpass_ { freq: cos (time * pi * 4.0) * 1000.0 + 1500.0 }
+        , delay2: delay_ (2.0 + sin (time * pi * 0.2) * 1.6)
         }
 
 piece :: Scene (SceneI Unit Unit) FFIAudio (Effect Unit) Frame0
