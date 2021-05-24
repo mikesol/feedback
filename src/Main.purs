@@ -1,7 +1,6 @@
 module Main where
 
 import Prelude
-
 import Control.Comonad.Cofree (Cofree, mkCofree)
 import Data.Foldable (for_)
 import Data.Functor.Indexed (ivoid)
@@ -27,11 +26,20 @@ import WAGS.Control.Qualified as WAGS
 import WAGS.Control.Types (Frame, Frame0, Scene)
 import WAGS.Graph.AudioUnit (TBandpass, TDelay, TGain, THighpass, TMicrophone, TSpeaker)
 import WAGS.Graph.Optionals (bandpass_, delay_, gain_, highpass_)
+import WAGS.Graph.Parameter (AudioParameterTransition(..), AudioParameter, AudioParameter_(..))
 import WAGS.Interpret (AudioContext, FFIAudio(..), close, context, defaultFFIAudio, getMicrophoneAndCamera, makeUnitCache)
 import WAGS.Patch (patch)
 import WAGS.Run (SceneI, run)
 
 vol = 1.4 :: Number
+
+audioP :: Number -> Number -> AudioParameter
+audioP param' timeOffset = AudioParameter { param, timeOffset, transition: LinearRamp }
+  where
+  param = Just param'
+
+ap' :: Number -> AudioParameter
+ap' = flip audioP 0.06
 
 type SceneType
   = { speaker :: TSpeaker /\ { mix :: Unit }
@@ -86,12 +94,12 @@ doChanges = WAGS.do
   { time } <- env
   ivoid
     $ change
-        { hpf0: highpass_ { freq: sin (time * pi * 0.5) * 1000.0 + 1500.0 }
-        , delay0: delay_ (0.4 + sin (time * pi * 2.0) * 0.2)
-        , bpf1: bandpass_ { freq: cos (time * pi * 1.6) * 1000.0 + 1500.0 }
-        , delay1: delay_ (0.3 + cos (time * pi * 0.7) * 0.1)
-        , hpf2: highpass_ { freq: cos (time * pi * 4.0) * 1000.0 + 1500.0 }
-        , delay2: delay_ (2.0 + sin (time * pi * 0.2) * 1.6)
+        { hpf0: highpass_ { freq: ap' $ sin (time * pi * 0.5) * 1000.0 + 1500.0 }
+        , delay0: delay_ $ ap' (0.4 + sin (time * pi * 2.0) * 0.2)
+        , bpf1: bandpass_ { freq: ap' $ cos (time * pi * 1.6) * 1000.0 + 1500.0 }
+        , delay1: delay_ $ ap' (0.3 + cos (time * pi * 0.7) * 0.1)
+        , hpf2: highpass_ { freq: ap' $ cos (time * pi * 4.0) * 1000.0 + 1500.0 }
+        , delay2: delay_ $ ap' (2.0 + sin (time * pi * 0.2) * 1.6)
         }
 
 piece :: Scene (SceneI Unit Unit) FFIAudio (Effect Unit) Frame0
@@ -135,17 +143,30 @@ initialState _ =
   , audioCtx: Nothing
   }
 
+classes :: forall r p. Array String -> HP.IProp ( class :: String | r ) p
+classes = HP.classes <<< map ClassName
+
 render :: forall m. State -> H.ComponentHTML Action () m
-render _ = do
-  HH.div_
-    [ HH.h1 [ HP.classes $ map ClassName [ "sm:text-5xl", "md:text-4xl", "lg:text-3xl", "font-bold" ] ]
-        [ HH.text "Fun with feedback" ]
-    , HH.button
-        [ HP.classes $ map ClassName [ "sm:text-4xl", "md:text-3xl", "lg:text-2xl", "modal-close px-4", "bg-indigo-500", "p-3", "rounded-lg", "text-white", "hover:bg-indigo-400" ], HE.onClick \_ -> StartAudio ]
-        [ HH.text "Start audio" ]
-    , HH.button
-        [ HP.classes $ map ClassName [ "sm:text-4xl", "md:text-3xl", "lg:text-2xl", "modal-close px-4", "bg-pink-500", "p-3", "rounded-lg", "text-white", "hover:bg-indigo-400" ], HE.onClick \_ -> StopAudio ]
-        [ HH.text "Stop audio" ]
+render _ =
+  HH.div [ classes [ "w-screen", "h-screen" ] ]
+    [ HH.div [ classes [ "flex", "flex-col", "w-full", "h-full" ] ]
+        [ HH.div [ classes [ "flex-grow" ] ] []
+        , HH.div [ classes [ "flex-grow-0", "flex", "flex-row" ] ]
+            [ HH.div [ classes [ "flex-grow" ] ] []
+            , HH.div_
+                [ HH.h1 [ classes [ "text-center", "text-3xl", "font-bold" ] ]
+                    [ HH.text "Fun with feedback" ]
+                , HH.button
+                    [ classes [ "text-2xl", "m-5", "bg-indigo-500", "p-3", "rounded-lg", "text-white", "hover:bg-indigo-400" ], HE.onClick \_ -> StartAudio ]
+                    [ HH.text "Start audio" ]
+                , HH.button
+                    [ classes [ "text-2xl", "m-5", "bg-pink-500", "p-3", "rounded-lg", "text-white", "hover:bg-pink-400" ], HE.onClick \_ -> StopAudio ]
+                    [ HH.text "Stop audio" ]
+                ]
+            , HH.div [ classes [ "flex-grow" ] ] []
+            ]
+        , HH.div [ classes [ "flex-grow" ] ] []
+        ]
     ]
 
 handleAction :: forall output m. MonadEffect m => MonadAff m => Action -> H.HalogenM State Action () output m Unit
