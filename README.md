@@ -8,6 +8,7 @@ Loops in the browser!
 
 ```bash
 git clone https://github.com/mikesol/feedback
+cd feedback
 npm install
 npm start
 ```
