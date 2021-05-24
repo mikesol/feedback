@@ -4,6 +4,7 @@ import Prelude
 import Control.Comonad.Cofree (Cofree, mkCofree)
 import Data.Foldable (for_)
 import Data.Functor.Indexed (ivoid)
+import Control.Apply.Indexed ((:*>))
 import Data.Maybe (Maybe(..))
 import Data.Nullable (toNullable)
 import Data.Tuple.Nested (type (/\))
@@ -20,7 +21,7 @@ import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
 import Math (cos, pi, sin)
 import WAGS.Change (change)
-import WAGS.Control.Functions (env, start)
+import WAGS.Control.Functions (env)
 import WAGS.Control.Functions.Validated (loop, (@|>))
 import WAGS.Control.Qualified as WAGS
 import WAGS.Control.Types (Frame, Frame0, Scene)
@@ -71,24 +72,6 @@ type SceneType
 type FrameTp p i o a
   = Frame (SceneI Unit Unit) FFIAudio (Effect Unit) p i o a
 
-createFrame :: FrameTp Frame0 {} SceneType Unit
-createFrame = WAGS.do
-  start
-  patch
-  ivoid
-    $ change
-        { atten0: gain_ 0.6
-        , gain0: gain_ 0.5
-        , atten1: gain_ 0.6
-        , gain1: gain_ 0.5
-        , atten2: gain_ 0.6
-        , gain2: gain_ 0.5
-        , gain_1_2: gain_ 0.7
-        , delay_1_2: delay_ 2.0
-        , mix: gain_ 1.0
-        }
-  doChanges
-
 doChanges :: forall proof. FrameTp proof SceneType SceneType Unit
 doChanges = WAGS.do
   { time } <- env
@@ -101,6 +84,22 @@ doChanges = WAGS.do
         , hpf2: highpass_ { freq: ap' $ cos (time * pi * 4.0) * 1000.0 + 1500.0 }
         , delay2: delay_ $ ap' (2.0 + sin (time * pi * 0.2) * 1.6)
         }
+
+createFrame :: FrameTp Frame0 {} SceneType Unit
+createFrame =
+  patch
+    :*> change
+        { atten0: gain_ 0.6
+        , gain0: gain_ 0.5
+        , atten1: gain_ 0.6
+        , gain1: gain_ 0.5
+        , atten2: gain_ 0.6
+        , gain2: gain_ 0.5
+        , gain_1_2: gain_ 0.7
+        , delay_1_2: delay_ 2.0
+        , mix: gain_ 1.0
+        }
+    :*> doChanges
 
 piece :: Scene (SceneI Unit Unit) FFIAudio (Effect Unit) Frame0
 piece =
@@ -155,7 +154,8 @@ render _ =
             [ HH.div [ classes [ "flex-grow" ] ] []
             , HH.div_
                 [ HH.h1 [ classes [ "text-center", "text-3xl", "font-bold" ] ]
-                    [ HH.text "Fun with feedback" ]
+                    [ HH.text "Fun with feedback" ], HH.p [ classes [ "text-center" ] ]
+                    [ HH.text "Use headphones!" ]
                 , HH.button
                     [ classes [ "text-2xl", "m-5", "bg-indigo-500", "p-3", "rounded-lg", "text-white", "hover:bg-indigo-400" ], HE.onClick \_ -> StartAudio ]
                     [ HH.text "Start audio" ]

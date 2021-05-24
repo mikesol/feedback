@@ -1,0 +1,43 @@
+name: Deploy
+on:
+  push:
+    branches:
+      - main
+jobs:
+  container-job:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '12'
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Set cache location
+        run: |
+            echo "spago_global_cache=$HOME/.cache/spago" >> $GITHUB_ENV
+      - name: Cache purescript dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+              ~/.npm
+              .spago
+              ${{ env.spago_global_cache }}
+              output
+              node_modules
+          key: >-
+              ${{ hashFiles('package-lock.json') }}-
+              ${{ hashFiles('spago.dhall') }}-
+              ${{ hashFiles('packages.dhall') }}
+      - name: Install dependencies
+        run: npm install
+      - name: Spago install
+        run: npx spago install
+      - name: Spago build
+        run: npx spago build
+      - name: Build
+        run: npm run build
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@4.1.1
+        with:
+          branch: gh-pages
+          folder: dist
