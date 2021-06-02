@@ -1,10 +1,10 @@
 module Main where
 
 import Prelude
+import Control.Apply.Indexed ((:*>))
 import Control.Comonad.Cofree (Cofree, mkCofree)
 import Data.Foldable (for_)
 import Data.Functor.Indexed (ivoid)
-import Control.Apply.Indexed ((:*>))
 import Data.Maybe (Maybe(..))
 import Data.Nullable (toNullable)
 import Data.Tuple.Nested (type (/\))
@@ -20,22 +20,21 @@ import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
 import Math (cos, pi, sin)
-import WAGS.Change (change)
-import WAGS.Control.Functions (env)
-import WAGS.Control.Functions.Validated (loop, (@|>))
-import WAGS.Control.Qualified as WAGS
-import WAGS.Control.Types (Frame, Frame0, Scene)
+import WAGS.Change (ichange)
+import WAGS.Control.Functions.Validated (iloop, (@!>))
+import WAGS.Control.Indexed (IxWAG)
+import WAGS.Control.Types (Frame0, Scene)
 import WAGS.Graph.AudioUnit (TBandpass, TDelay, TGain, THighpass, TMicrophone, TSpeaker)
 import WAGS.Graph.Optionals (bandpass_, delay_, gain_, highpass_)
 import WAGS.Graph.Parameter (AudioParameterTransition(..), AudioParameter, AudioParameter_(..))
 import WAGS.Interpret (AudioContext, FFIAudio(..), close, context, defaultFFIAudio, getMicrophoneAndCamera, makeUnitCache)
-import WAGS.Patch (patch)
+import WAGS.Patch (ipatch)
 import WAGS.Run (SceneI, run)
 
 vol = 1.4 :: Number
 
 audioP :: Number -> Number -> AudioParameter
-audioP param' timeOffset = AudioParameter { param, timeOffset, transition: LinearRamp }
+audioP param' timeOffset = AudioParameter { param, timeOffset, transition: LinearRamp, forceSet: false }
   where
   param = Just param'
 
@@ -69,14 +68,16 @@ type SceneType
     , microphone :: TMicrophone /\ {}
     }
 
-type FrameTp p i o a
-  = Frame (SceneI Unit Unit) FFIAudio (Effect Unit) p i o a
+type Env
+  = SceneI Unit Unit
 
-doChanges :: forall proof. FrameTp proof SceneType SceneType Unit
-doChanges = WAGS.do
-  { time } <- env
+type FrameTp p i o a
+  = IxWAG FFIAudio (Effect Unit) p Unit i o a
+
+doChanges :: forall proof. Env -> FrameTp proof SceneType SceneType Unit
+doChanges { time } =
   ivoid
-    $ change
+    $ ichange
         { hpf0: highpass_ { freq: ap' $ sin (time * pi * 0.5) * 1000.0 + 1500.0 }
         , delay0: delay_ $ ap' (0.4 + sin (time * pi * 2.0) * 0.2)
         , bpf1: bandpass_ { freq: ap' $ cos (time * pi * 1.6) * 1000.0 + 1500.0 }
@@ -85,10 +86,10 @@ doChanges = WAGS.do
         , delay2: delay_ $ ap' (0.1 + sin (time * pi * 0.2) * 0.07)
         }
 
-createFrame :: FrameTp Frame0 {} SceneType Unit
-createFrame =
-  patch
-    :*> change
+createFrame :: Env -> FrameTp Frame0 {} SceneType Unit
+createFrame env =
+  ipatch
+    :*> ichange
         { atten0: gain_ 0.6
         , gain0: gain_ 0.5
         , atten1: gain_ 0.6
@@ -99,12 +100,12 @@ createFrame =
         , delay_1_2: delay_ 0.9
         , mix: gain_ 1.0
         }
-    :*> doChanges
+    :*> doChanges env
 
-piece :: Scene (SceneI Unit Unit) FFIAudio (Effect Unit) Frame0
+piece :: Scene Env FFIAudio (Effect Unit) Frame0 Unit
 piece =
   createFrame
-    @|> loop (const doChanges)
+    @!> iloop (const <<< doChanges)
 
 easingAlgorithm :: Cofree ((->) Int) Int
 easingAlgorithm =
