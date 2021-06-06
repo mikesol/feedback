@@ -1,6 +1,7 @@
 module Main where
 
 import Prelude
+
 import Control.Apply.Indexed ((:*>))
 import Control.Comonad.Cofree (Cofree, mkCofree)
 import Data.Foldable (for_)
@@ -25,21 +26,15 @@ import WAGS.Control.Functions.Validated (iloop, (@!>))
 import WAGS.Control.Indexed (IxWAG)
 import WAGS.Control.Types (Frame0, Scene)
 import WAGS.Graph.AudioUnit (TBandpass, TDelay, TGain, THighpass, TMicrophone, TSpeaker)
-import WAGS.Graph.Optionals (bandpass_, delay_, gain_, highpass_)
-import WAGS.Graph.Parameter (AudioParameterTransition(..), AudioParameter, AudioParameter_(..))
+import WAGS.Graph.Parameter (AudioParameter, ff)
 import WAGS.Interpret (AudioContext, FFIAudio(..), close, context, defaultFFIAudio, getMicrophoneAndCamera, makeUnitCache)
 import WAGS.Patch (ipatch)
-import WAGS.Run (SceneI, run)
+import WAGS.Run (RunAudio, SceneI, RunEngine, run)
 
 vol = 1.4 :: Number
 
-audioP :: Number -> Number -> AudioParameter
-audioP param' timeOffset = AudioParameter { param, timeOffset, transition: LinearRamp, forceSet: false }
-  where
-  param = Just param'
-
 ap' :: Number -> AudioParameter
-ap' = flip audioP 0.06
+ap' = ff 0.06 <<< pure
 
 type SceneType
   = { speaker :: TSpeaker /\ { mix :: Unit }
@@ -72,37 +67,37 @@ type Env
   = SceneI Unit Unit
 
 type FrameTp p i o a
-  = IxWAG FFIAudio (Effect Unit) p Unit i o a
+  = IxWAG RunAudio RunEngine p Unit i o a
 
 doChanges :: forall proof. Env -> FrameTp proof SceneType SceneType Unit
 doChanges { time } =
   ivoid
     $ ichange
-        { hpf0: highpass_ { freq: ap' $ sin (time * pi * 0.5) * 1000.0 + 1500.0 }
-        , delay0: delay_ $ ap' (0.4 + sin (time * pi * 2.0) * 0.2)
-        , bpf1: bandpass_ { freq: ap' $ cos (time * pi * 1.6) * 1000.0 + 1500.0 }
-        , delay1: delay_ $ ap' (0.3 + cos (time * pi * 0.7) * 0.1)
-        , hpf2: highpass_ { freq: ap' $ cos (time * pi * 4.0) * 1000.0 + 1500.0 }
-        , delay2: delay_ $ ap' (0.1 + sin (time * pi * 0.2) * 0.07)
+        { hpf0: ap' $ sin (time * pi * 0.5) * 1000.0 + 1500.0
+        , delay0: ap' (0.4 + sin (time * pi * 2.0) * 0.2)
+        , bpf1: ap' $ cos (time * pi * 1.6) * 1000.0 + 1500.0
+        , delay1: ap' (0.3 + cos (time * pi * 0.7) * 0.1)
+        , hpf2: ap' $ cos (time * pi * 4.0) * 1000.0 + 1500.0
+        , delay2: ap' (0.1 + sin (time * pi * 0.2) * 0.07)
         }
 
 createFrame :: Env -> FrameTp Frame0 {} SceneType Unit
 createFrame env =
   ipatch
     :*> ichange
-        { atten0: gain_ 0.6
-        , gain0: gain_ 0.5
-        , atten1: gain_ 0.6
-        , gain1: gain_ 0.5
-        , atten2: gain_ 0.6
-        , gain2: gain_ 0.5
-        , gain_1_2: gain_ 0.7
-        , delay_1_2: delay_ 0.9
-        , mix: gain_ 1.0
+        { atten0: 0.6
+        , gain0: 0.5
+        , atten1: 0.6
+        , gain1: 0.5
+        , atten2: 0.6
+        , gain2: 0.5
+        , gain_1_2: 0.7
+        , delay_1_2: 0.9
+        , mix: 1.0
         }
     :*> doChanges env
 
-piece :: Scene Env FFIAudio (Effect Unit) Frame0 Unit
+piece :: Scene Env RunAudio RunEngine Frame0 Unit
 piece =
   createFrame
     @!> iloop (const <<< doChanges)
